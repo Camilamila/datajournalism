@@ -1,0 +1,229 @@
+###Taller de análisis de datos - Camila Salazar
+###Data bootcamp 22 de agosto
+
+#Directorio de trabajo y cargar librerías
+setwd("/Users/Camila/Documents/Escuela de datos/databootcamp")
+require(dplyr)
+require(ggplot2)
+require(tidyr)
+require(xlsx)
+require(ggthemes)
+
+#Carga de archivos y limpieza
+dc_wikia_data <- read_csv("~/Documents/Escuela de datos/databootcamp/dc-wikia-data.csv")
+marvel_wikia_data <- read_csv("~/Documents/Escuela de datos/databootcamp/marvel-wikia-data.csv")
+
+dc_wikia_data<- dc_wikia_data %>%
+  mutate(comic="dc")
+marvel_wikia_data<- marvel_wikia_data %>%
+  mutate(comic="marvel")
+comics <- bind_rows(dc_wikia_data,marvel_wikia_data)
+comics$ALIGN <- str_replace(comics$ALIGN, " Characters", "" )
+comics$SEX <- str_replace(comics$SEX, " Characters", "" )
+comics$ID <- str_replace(comics$ID, " Identity", "" )
+comics <-comics %>%
+  select(-urlslug)%>%
+  filter(SEX=="Male" | SEX=="Female") 
+
+#Gráficos y tablas
+table(comics$SEX, comics$ALIGN)
+grafico1 <- ggplot(comics, aes(x=SEX)) + geom_bar(fill="#28324a") +
+labs(x="Sexo", y="Cantidad") 
+grafico1
+
+grafico2 <- comics %>%
+  filter(ALIGN!="Reformed Criminals") %>%
+  ggplot(aes(x=SEX, fill= ALIGN)) + geom_bar(position = "dodge") +
+  labs(x="Sexo", y="Cantidad") + 
+  scale_fill_manual("", values = c("Bad" = "#28324a", "Good" = "#00cef6", "Neutral" = "#3c78d8"))
+grafico2
+
+grafico3 <- comics %>%
+  filter(ID=="No Dual" | ID=="Public" | ID=="Secret") %>%
+  ggplot(aes(x=SEX, fill=ID))+ geom_bar(position = "fill")+
+  labs(x="Sexo", y="Cantidad") + 
+  scale_fill_manual("Identidad", values = c("No Dual" = "#28324a", "Public" = "#00cef6", "Secret" = "#3c78d8"))
+grafico3
+
+decadas <- comics %>%
+  group_by(YEAR) %>%
+  summarise(total=n(),
+            male=sum(SEX=="Male")) %>%
+  filter(!is.na(YEAR))%>%
+  mutate(hombres=round((male/total*100),0),
+         mujeres=100-hombres)
+
+graficodecada <- ggplot(decadas, aes(x=YEAR, y=mujeres)) + 
+  geom_line(size=1.5, color="#00cef6") +
+  ggtitle("Evolución de personajes mujeres") +
+  theme_fivethirtyeight() +
+  ylab("Porcentaje de personajes mujeres") +
+  theme(axis.title = element_text()) + 
+  theme(axis.title.x = element_blank()) +
+  theme(axis.title.y = element_text(size=10, margin=margin(0,15,0,0)))
+graficodecada
+
+graficocantidad<- ggplot(comics, aes(x=YEAR)) + 
+  ggtitle("Cantidad de personajes nuevos por año") +
+  theme_fivethirtyeight() +
+  geom_histogram(binwidth = 1, color="#28324a", fill="#00cef6")
+graficocantidad
+
+#Análisis cuantitativo
+planilla <- read_excel("~/Documents/Escuela de datos/databootcamp/planilla.xlsx") #Deben revisar directorio de trabajo
+histograma <- ggplot(planilla, aes(x=SALARIO)) +
+  ggtitle("Salario de funcionarios") +
+  theme_fivethirtyeight() +
+  geom_histogram(color="#28324a", fill="#3c78d8")
+histograma
+
+graficobox<-ggplot(planilla, aes(x=1, y=SALARIO)) +
+  ggtitle("Salario de funcionarios") +
+  theme_fivethirtyeight() +
+  geom_boxplot(color="#28324a", fill="#00cef6")
+graficobox
+
+scattergraf<- ggplot(planilla, aes(x=SALARIO, y=`A?OS DE SERVICIO`))+
+  theme_fivethirtyeight() +
+  ggtitle("Salario vs a?os de servicio") +
+  geom_point(color="#00cef6") + geom_smooth(method = "lm", se = FALSE) + 
+  ylab("Años de servicio") +
+  xlab("Salario") +
+  theme(axis.title = element_text()) + 
+  theme(axis.title.x = element_text(size=10)) +
+  theme(axis.title.y = element_text(size=10, margin=margin(0,15,0,0)))
+scattergraf
+
+planilla <- planilla %>%
+  filter(JORNADA==1 | JORNADA==0.5) %>%
+  mutate(jornada=ifelse(JORNADA==1, "completa", "medio tiempo"))
+
+dens<- ggplot(planilla, aes(x = SALARIO, fill = as.factor(jornada))) +
+  theme_fivethirtyeight() +
+  ggtitle("Salario según jornada") +
+  geom_density(alpha = .3) +
+  scale_fill_manual("Jornada", values = c("completa" = "#00cef6", "medio tiempo" = "#3c78d8"))
+dens
+boxp<- ggplot(planilla, aes(x=as.factor(jornada), y=SALARIO)) +
+  ggtitle("Salario de funcionarios") +
+  theme_fivethirtyeight() +
+  geom_boxplot(color="#28324a", fill="#00cef6")
+boxp
+
+dens2 <- ggplot(planilla, aes(x = SALARIO)) +
+  theme_fivethirtyeight() +
+  ggtitle("Salario") +
+  geom_density(alpha = .3, fill ="#00cef6") +
+geom_vline(aes(xintercept=mean(SALARIO)),
+           color="#3c78d8")
+dens2
+
+densmedian <- ggplot(planilla, aes(x = SALARIO)) +
+  theme_fivethirtyeight() +
+  ggtitle("Salario") +
+  geom_density(alpha = .3, fill ="#00cef6") +
+  geom_vline(aes(xintercept=median(SALARIO)),
+             color="#28324a") +
+  geom_vline(aes(xintercept=mean(SALARIO)),
+             color="#3c78d8")
+densmedian
+
+boxp2<- ggplot(planilla, aes(x=1, y=SALARIO)) +
+  ggtitle("Salario de funcionarios") +
+  theme_fivethirtyeight() +
+  geom_boxplot(color="#28324a", fill="#00cef6") +
+  coord_flip()
+boxp2
+
+
+#Correlaciones
+install.packages("gpclib", type = "source")
+library("gcplib")
+install.packages("raster")
+library("raster")
+install.packages("maptools")
+library("maptools")
+install.packages("broom")
+library("broom")
+install.packages()
+gpclibPermit()
+
+#Importar archivo con datos
+elecciones <- read_excel("~/Documents/Escuela de datos/databootcamp/datos cantones y elecciones.xlsx")
+#Importar geodatos
+cr <- getData("GADM", country = "CRI", level = 2)
+#transformar geodatos
+cr2<- fortify(cr, region = "HASC_2")
+#Unir bases
+cr_mapa <- merge(cr2, elecciones, by.x= "id", by.y="HASC", all.x = TRUE)
+#ordenar poligonos
+ord2<- order(cr_mapa$order)
+cr_mapa <- cr_mapa[ord2, ]
+
+#Mapa
+votopac <-ggplot() +
+  geom_polygon(data = cr_mapa, aes(x = long, y = lat, group = group, fill = PAC)) +
+  coord_map() + ylim(8, NA) + 
+  scale_fill_gradient(low = "#ffffff", high = "#ffc100", limits = c(0, 100)) +
+  labs(x = NULL, 
+       y = NULL, 
+       title = "Voto al PAC", 
+       subtitle = "Elecciones 2014") +
+  theme_bw() +
+  theme(
+    plot.background = element_blank()
+    ,panel.grid.major = element_blank()
+    ,panel.grid.minor = element_blank()
+    ,panel.border = element_blank()
+  ) 
+votopac
+
+votopln <-ggplot() +
+  geom_polygon(data = cr_mapa, aes(x = long, y = lat, group = group, fill = PLN)) +
+  coord_map() + ylim(8, NA) + 
+  scale_fill_gradient(low = "#f4f1e6", high = "#2cd026", limits = c(0, 100)) +
+  labs(x = NULL, 
+       y = NULL, 
+       title = "Voto al PLN", 
+       subtitle = "Elecciones 2014") +
+  theme_bw() +
+  theme(
+    plot.background = element_blank()
+    ,panel.grid.major = element_blank()
+    ,panel.grid.minor = element_blank()
+    ,panel.border = element_blank()
+  )
+votopln
+
+#Correlaciones
+datacor <- select(.data = elecciones, 
+                  PAC, PLN, IDPHC, IDHC, urbana, 
+                  escolaridad, internet)
+
+#matriz de correlación
+cor(datacor)
+model <- lm(PAC ~ IDPHC, data = elecciones)
+summary(model) #P value pequeño, es estadísticamente significativo
+modelpln <- lm(PLN ~ IDPHC, data = elecciones)
+summary(modelpln) #P value pequeño, es estadísticamente significativo
+#Graficos
+pac_g<- ggplot(elecciones, aes(x=PAC, y=IDPHC))+
+  theme_fivethirtyeight() +
+  ggtitle("Votos PAC vs índice de pobreza") +
+  geom_point(color="#ffc100") + geom_smooth(method = "lm", se = FALSE, color="#28324a") + 
+  ylab("Índice de pobreza") +
+  xlab("% votos PAC") +
+  theme(axis.title = element_text()) + 
+  theme(axis.title.x = element_text(size=10)) +
+  theme(axis.title.y = element_text(size=10, margin=margin(0,15,0,0)))
+pac_g
+pln_g<- ggplot(elecciones, aes(x=PLN, y=IDPHC))+
+  theme_fivethirtyeight() +
+  ggtitle("Votos PLN vs índice de pobreza") +
+  geom_point(color="#2cd026") + geom_smooth(method = "lm", se = FALSE, color="#28324a") + 
+  ylab("Índice de desarrollo humano") +
+  xlab("% votos PLN") +
+  theme(axis.title = element_text()) + 
+  theme(axis.title.x = element_text(size=10)) +
+  theme(axis.title.y = element_text(size=10, margin=margin(0,15,0,0)))
+pln_g
