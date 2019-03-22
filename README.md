@@ -1,2 +1,2 @@
-# datajournalism
-Materiales sobre periodismo de datos
+# Data journalism
+Materials in English and Spanish created for data journalism workshops.
