@@ -1,0 +1,413 @@
+---
+title: "Elecciones Costa Rica 2018"
+author: "Camila Salazar"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Análisis de resultados de las elecciones presidenciales en Costa Rica
+
+El reportaje completo [Aquí](https://www.nacion.com/gnfactory/investigacion/2018/elecciones_presidenciales/diputados/analisis_resultados_1.html)
+```{r error=FALSE, message=FALSE, warning=FALSE}
+setwd("/Users/camilasalazar/Documents/Nacion/Elecciones2018(copia)/Resultados 2018")
+library(dplyr)
+library(readxl)
+library(tidyr)
+library(readr)
+library(stringr)
+library(ggplot2)
+library(beeswarm)
+
+#codigos y nombre cantones
+codigohasc <- read_excel("codigohasc2.xlsx")
+#Resultados 2014
+resultados2014 <- read_delim("resultados14.csv", 
+                                                ";", escape_double = FALSE, trim_ws = TRUE)
+resultados14<-resultados2014%>%
+  group_by(codigo)%>%
+  summarise_all(sum)
+
+resultados14_porc<-resultados14%>%
+  group_by(codigo)%>%
+  mutate_all(funs((. / pvalid14)*100))%>%
+  select(-pvalid14)%>%
+  filter(codigo<800)
+ 
+
+#Partido ganador en 2014
+ganador14<- resultados14_porc%>%
+  gather(partido, votos14, -codigo) %>%
+  group_by(codigo)%>%
+  arrange(codigo, desc(votos14))%>%
+  mutate(ganador=row_number())%>%
+  filter(ganador==1)%>%
+  separate(partido, c("partido14", "anio"), sep="1")%>%
+  select(codigo, partido14)
+table(ganador14$partido14)
+
+#Porcentaje de votos por canton para PAC, PLN, PIN, PRN, PUSC
+pac14<-resultados14_porc%>%
+select(codigo, pac14)
+
+pln14<-resultados14_porc%>%
+  select(codigo, pln14)
+
+pin14<-resultados14_porc%>%
+  select(codigo, pin14)
+
+prn14<-resultados14_porc%>%
+  select(codigo, prn14)
+
+pusc14<-resultados14_porc%>%
+  select(codigo, pusc14)
+
+#####RESULTADOS 2018
+base <- read_excel("votos850am.xlsx")
+resultados <- base%>%
+  mutate(cero=ifelse(cod_canton<10,0,""))%>%
+  unite(codigo, cod_provincia, cero, cod_canton, sep="", remove=F)%>%
+  filter(codigo<800)
+names(resultados)[names(resultados) == 'votos1'] <- 'pase18'
+names(resultados)[names(resultados) == 'votos2'] <- 'pac18'
+names(resultados)[names(resultados) == 'votos3'] <- 'adc18'
+names(resultados)[names(resultados) == 'votos4'] <- 'pt18'
+names(resultados)[names(resultados) == 'votos5'] <- 'fa18'
+names(resultados)[names(resultados) == 'votos6'] <- 'pin18'
+names(resultados)[names(resultados) == 'votos7'] <- 'pln18'
+names(resultados)[names(resultados) == 'votos8'] <- 'pml18'
+names(resultados)[names(resultados) == 'votos9'] <- 'png18'
+names(resultados)[names(resultados) == 'votos10'] <- 'prc18'
+names(resultados)[names(resultados) == 'votos11'] <- 'prsc18'
+names(resultados)[names(resultados) == 'votos12'] <- 'prn18'
+names(resultados)[names(resultados) == 'votos13'] <- 'pusc18'
+
+
+resultados <- resultados %>%
+  select(codigo, ends_with("18"), votos_validos)
+resultados$codigo<-as.integer(resultados$codigo)
+
+#Porcentaje
+resultados18_porc<- resultados%>%
+  group_by(codigo)%>%
+  mutate_all(funs((. / votos_validos)*100))
+
+#¿cuál partido ganó por cantón?
+ganador<- resultados18_porc%>%
+  select(-votos_validos) %>%
+  gather(partido, votos18, -codigo) %>%
+  group_by(codigo)%>%
+  arrange(codigo, desc(votos18))%>%
+  mutate(ganador=row_number())%>%
+  filter(ganador==1)%>%
+  separate(partido, c("partido18", "anio"), sep="1")%>%
+  select(codigo, partido18, votos18)
+table(ganador$partido18)
+
+#Cambiaron los cantones?
+cambio <-left_join(ganador, ganador14, by="codigo")
+cambio <- cambio %>%
+  mutate(cambio=ifelse(partido18==partido14,0,1),
+         robo=ifelse(partido18=="prn" & partido14=="pac", "pac", 
+                     ifelse(partido18=="prn" & partido14=="pln", "pln",
+                        ifelse(partido18=="prn" & partido14=="fa", "fa", "1"))))
+table(cambio$cambio)
+table(cambio$partido14, cambio$cambio)
+
+
+#Cambio partidos
+cambio_pac<- resultados18_porc%>%
+  select(codigo, pac18)%>%
+  left_join(pac14, by="codigo")%>%
+  mutate(cambiopac=pac18-pac14)
+
+pac_grafico<- cambio_pac%>%
+  select(-cambiopac)%>%
+  gather(anio, votos, - codigo)%>%
+  mutate(anio=ifelse(anio=="pac14", 2014, 2018))
+par(las=1, bty="l", family="mono", font=1, bg="transparent")
+beeswarm(votos ~ anio, data=pac_grafico, col="#BE0000", pch=16, method="hex", 
+         cex=0.8, horizontal=TRUE, ylab="", xlab="Porcentaje de votos del PAC", 
+         main="Porcentaje de votos por cantón del PAC", xlim=c(0, 60))
+
+cambio_pln<- resultados18_porc%>%
+  select(codigo, pln18)%>%
+  left_join(pln14, by="codigo")%>%
+  mutate(cambiopln=pln18-pln14)
+
+pln_grafico<- cambio_pln%>%
+  select(-cambiopln)%>%
+  gather(anio, votos, - codigo)%>%
+  mutate(anio=ifelse(anio=="pln14", 2014, 2018))
+par(las=1, bty="l", family="mono", font=1, bg="transparent")
+beeswarm(votos ~ anio, data=pln_grafico, col="#219B63", pch=19, method="hex", 
+         cex=0.8, horizontal=TRUE, ylab="", xlab="Porcentaje de votos", 
+         main="Porcentaje de votos por cantón del PLN", xlim=c(0, 60))
+
+cambio_pusc<- resultados18_porc%>%
+  select(codigo, pusc18)%>%
+  left_join(pusc14, by="codigo")%>%
+  mutate(cambiopusc=pusc18-pusc14)
+pusc_grafico<- cambio_pusc%>%
+  select(-cambiopusc)%>%
+  gather(anio, votos, - codigo)%>%
+  mutate(anio=ifelse(anio=="pusc14", 2014, 2018))
+par(las=1, bty="l", family="mono", font=1, bg="transparent")
+beeswarm(votos ~ anio, data=pusc_grafico, col="#005094", pch=16, method="hex", 
+         cex=0.8, horizontal=TRUE, ylab="", xlab="Porcentaje de votos", 
+         main="Porcentaje de votos por cantón del PUSC", xlim=c(0, 60))
+
+
+cambio_prn<- resultados18_porc%>%
+  select(codigo, prn18)%>%
+  left_join(prn14, by="codigo")%>%
+  mutate(cambioprn=prn18-prn14)
+prn_grafico<- cambio_prn%>%
+  select(-cambioprn)%>%
+  gather(anio, votos, - codigo)%>%
+  mutate(anio=ifelse(anio=="prn14", 2014, 2018))
+par(las=1, bty="l", family="mono", font=1, bg="transparent")
+beeswarm(votos ~ anio, data=prn_grafico, col="#FFCC00", pch=16, method="hex", 
+         cex=0.8, horizontal=TRUE, ylab="", xlab="Porcentaje de votos", 
+         main="Porcentaje de votos por cantón del PRN", xlim=c(0, 60))
+
+
+cambio_pin<- resultados18_porc%>%
+  select(codigo, pin18)%>%
+  left_join(pin14, by="codigo")%>%
+  mutate(cambiopin=pin18-pin14)
+
+pin_grafico<- cambio_pin%>%
+  select(-cambiopin)%>%
+  gather(anio, votos, - codigo)%>%
+  mutate(anio=ifelse(anio=="pin14", 2014, 2018))
+par(las=1, bty="l", family="mono", font=1, bg="transparent")
+beeswarm(votos ~ anio, data=pin_grafico, col="#3F5E78", pch=16, method="hex", 
+         cex=0.8, horizontal=TRUE, ylab="", xlab="Porcentaje de votos", 
+         main="Porcentaje de votos por cantón del PIN", xlim=c(0, 60))
+
+##CANTONES PRINCIPALES
+#¿Qué % del voto representa el de esos 6 cantones?
+cantones<- resultados%>%
+  filter(codigo==101 | codigo==103 |codigo==119|codigo==201|codigo==210|codigo==301)
+sum(cantones$votos_validos)/sum(resultados$votos_validos)*100
+
+cantones2<-resultados18_porc%>%
+  filter(codigo==101 | codigo==103 |codigo==119|codigo==201|codigo==210|codigo==301)%>%
+  select(-votos_validos)%>%
+  gather(partido, votos, -codigo)%>%
+  arrange(codigo, desc(votos))%>%
+  mutate(rank=row_number())
+
+###Cantones clave
+##Importar padron
+padron <- read_csv("padron_completo_con_edad.txt")
+padron2 <- padron %>%
+  mutate(codigo=substr(codelec, 1, 3))%>%
+  group_by(codigo)%>%
+  summarise(electores=n())%>%
+  filter(codigo<800)
+padron2$codigo<-as.double(padron2$codigo)
+cantones_grandes <-full_join(resultados, padron2, by=c("codigo"))
+cantones_grandes <-full_join(cantones_grandes, codigohasc, by=c("codigo"))
+
+cantones_grandes <- cantones_grandes %>%
+  filter(electores>=100000)
+
+
+ganador2018<-left_join(ganador, codigohasc, by="codigo")
+#Para mapas
+mapa14 <-  left_join(resultados14_porc, codigohasc, by="codigo")
+mapa18<-left_join(resultados18_porc, codigohasc, by="codigo")
+library("gpclib")
+library("raster")
+library("maptools")
+library("broom")
+library(mapproj)
+gpclibPermit()
+
+
+#Importar geodatos
+cr <- getData("GADM", country = "CRI", level = 2)
+#transformar geodatos
+cr2<- fortify(cr, region = "HASC_2")
+#Unir bases
+cr_mapa14 <- merge(cr2, mapa14, by.x= "id", by.y="HASC", all.x = TRUE)
+#ordenar pol?gonos
+ord2<- order(cr_mapa14$order)
+cr_mapa14 <- cr_mapa14[ord2, ]
+
+#Mapas 2014
+pln_14<-ggplot() +
+  geom_polygon(data = cr_mapa14, aes(x = long, y = lat, group = group, fill = pln14),color = "white") +
+  coord_map() + ylim(8, NA) + 
+  scale_fill_gradient(low = "#E0E0E0", high = "#219B63", limits = c(0, 70)) +
+  labs(x = NULL, 
+       y = NULL, 
+       title = "PLN 2014") +
+  theme_void()
+pln_14
+
+pac_14<-ggplot() +
+  geom_polygon(data = cr_mapa14, aes(x = long, y = lat, group = group, fill = pac14),color = "white") +
+  coord_map() + ylim(8, NA) + 
+  scale_fill_gradient(low = "#E0E0E0", high = "#BE0000", limits = c(0, 70)) +
+  labs(x = NULL, 
+       y = NULL, 
+       title = "pac 2014") +
+  theme_void()
+pac_14
+
+prn_14<-ggplot() +
+  geom_polygon(data = cr_mapa14, aes(x = long, y = lat, group = group, fill = prn14),color = "white") +
+  coord_map() + ylim(8, NA) + 
+  scale_fill_gradient(low = "#E0E0E0", high = "#005094", limits = c(0, 70)) +
+  labs(x = NULL, 
+       y = NULL, 
+       title = "prn 2014") +
+  theme_void()
+prn_14
+
+pusc_14<-ggplot() +
+  geom_polygon(data = cr_mapa14, aes(x = long, y = lat, group = group, fill = pusc14),color = "white") +
+  coord_map() + ylim(8, NA) + 
+  scale_fill_gradient(low = "#E0E0E0", high = "#005094", limits = c(0, 70)) +
+  labs(x = NULL, 
+       y = NULL, 
+       title = "pusc 2014") +
+  theme_void()
+pusc_14
+
+pin_14<-ggplot() +
+  geom_polygon(data = cr_mapa14, aes(x = long, y = lat, group = group, fill = pin14),color = "white") +
+  coord_map() + ylim(8, NA) + 
+  scale_fill_gradient(low = "#E0E0E0", high = "#0077DD", limits = c(0, 70)) +
+  labs(x = NULL, 
+       y = NULL, 
+       title = "pin 2014") +
+  theme_void()
+pin_14
+
+
+#Mapas 2018
+cr_mapa18 <- merge(cr2, mapa18, by.x= "id", by.y="HASC", all.x = TRUE)
+#ordenar pol?gonos
+ord2<- order(cr_mapa18$order)
+cr_mapa18 <- cr_mapa18[ord2, ]
+
+
+pln_18<-ggplot() +
+  geom_polygon(data = cr_mapa18, aes(x = long, y = lat, group = group, fill = pln18),color = "white") +
+  coord_map() + ylim(8, NA) + 
+  scale_fill_gradient(low = "#E0E0E0", high = "#219B63", limits = c(0, 70)) +
+  labs(x = NULL, 
+       y = NULL, 
+       title = "PLN 2018") +
+  theme_void()
+pln_18
+
+pac_18<-ggplot() +
+  geom_polygon(data = cr_mapa18, aes(x = long, y = lat, group = group, fill = pac18),color = "white") +
+  coord_map() + ylim(8, NA) + 
+  scale_fill_gradient(low = "#E0E0E0", high = "#BE0000", limits = c(0, 70)) +
+  labs(x = NULL, 
+       y = NULL, 
+       title = "pac 2018") +
+  theme_void()
+pac_18
+
+prn_18<-ggplot() +
+  geom_polygon(data = cr_mapa18, aes(x = long, y = lat, group = group, fill = prn18),color = "white") +
+  coord_map() + ylim(8, NA) + 
+  scale_fill_gradient(low = "#E0E0E0", high = "#005094", limits = c(0, 70)) +
+  labs(x = NULL, 
+       y = NULL, 
+       title = "prn 2018") +
+  theme_void()
+prn_18
+
+pusc_18<-ggplot() +
+  geom_polygon(data = cr_mapa18, aes(x = long, y = lat, group = group, fill = pusc18),color = "white") +
+  coord_map() + ylim(8, NA) + 
+  scale_fill_gradient(low = "#E0E0E0", high = "#005094", limits = c(0, 70)) +
+  labs(x = NULL, 
+       y = NULL, 
+       title = "pusc 2018") +
+  theme_void()
+pusc_18
+
+pin_18<-ggplot() +
+  geom_polygon(data = cr_mapa18, aes(x = long, y = lat, group = group, fill = pin18),color = "white") +
+  coord_map() + ylim(8, NA) + 
+  scale_fill_gradient(low = "#E0E0E0", high = "#0077DD", limits = c(0, 70)) +
+  labs(x = NULL, 
+       y = NULL, 
+       title = "pin 2018") +
+  theme_void()
+pin_18
+
+
+#Cantones principales
+san_jose<- cr_mapa14%>%
+  filter(codigo==101)%>%
+  ggplot() +
+  geom_polygon(aes(x = long, y = lat, group = group),color = "black", show.legend=F) +
+  coord_map()  +
+  labs(x = NULL, 
+       y = NULL) +
+  theme_void()
+san_jose
+
+desampa<- cr_mapa14%>%
+  filter(codigo==103)%>%
+  ggplot() +
+  geom_polygon(aes(x = long, y = lat, group = group),color = "black", show.legend=F) +
+  coord_map()  +
+  labs(x = NULL, 
+       y = NULL) +
+  theme_void()
+desampa
+
+perez<- cr_mapa14%>%
+  filter(codigo==119)%>%
+  ggplot() +
+  geom_polygon(aes(x = long, y = lat, group = group),color = "black", show.legend=F) +
+  coord_map()  +
+  labs(x = NULL, 
+       y = NULL) +
+  theme_void()
+perez
+
+alajuela<- cr_mapa14%>%
+  filter(codigo==201)%>%
+  ggplot() +
+  geom_polygon(aes(x = long, y = lat, group = group),color = "black", show.legend=F) +
+  coord_map()  +
+  labs(x = NULL, 
+       y = NULL) +
+  theme_void()
+alajuela
+
+sancarlos<- cr_mapa14%>%
+  filter(codigo==210)%>%
+  ggplot() +
+  geom_polygon(aes(x = long, y = lat, group = group),color = "black", show.legend=F) +
+  coord_map()  +
+  labs(x = NULL, 
+       y = NULL) +
+  theme_void()
+sancarlos
+
+cartago<- cr_mapa14%>%
+  filter(codigo==301)%>%
+  ggplot() +
+  geom_polygon(aes(x = long, y = lat, group = group),color = "black", show.legend=F) +
+  coord_map()  +
+  labs(x = NULL, 
+       y = NULL) +
+  theme_void()
+cartago
+```
+
