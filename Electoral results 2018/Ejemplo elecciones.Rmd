@@ -1,0 +1,286 @@
+---
+title: "Análisis de resultados electorales en R"
+author: "Camila Salazar"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Este ejemplo muestra cómo utilizar **for loops**,  **funciones**, **dplyr**, como hacer gráficos y **mapas** usando datos de los resultados de las elecciones presidenciales en el 2018 y 2014.  
+
+Este análisis se realizó para el reportaje **"Restauración arrebató el centro del país al PAC y al PLN las costas"**  publicado el 6 de febrero de 2018 en La Nación.  El reportaje completo puede verlo en [este enlace](https://www.nacion.com/gnfactory/investigacion/2018/elecciones_presidenciales/diputados/analisis_resultados_1.html).
+
+El objetivo del análisis era entender los resultados electorales del 2018 y responder a las preguntas:
+
+**¿Cómo un partido que solamente tenía un diputado en el 2014, obtuvo el mayor porcentaje de votos en el 2018?**
+
+* ¿Cuántos cantones ganó cada partido y cómo se compara con el 2014?  
+* ¿Cuáles cantones ganaron cada uno de los partidos?  
+* ¿Cómo cambiaron los ganadores por cantón en comparación al 2014?
+* ¿A cuáles partidos les ganó cantones el PRN? 
+* ¿Quién ganó en los 6 cantones con más electores?  
+* ¿Cómo cambió el porcentaje de votos del PLN, PUSC, PAC, PRN y PIN?  
+
+
+## Setup
+Si no las tiene instaladas, las puede instalar con el comando `install.packages("nombre de la librería")`.
+
+```{r error=FALSE, message=FALSE, warning=FALSE}
+setwd("/Users/camilasalazar/Documents/Curso periodismo de datos/Clases 2020")
+library(dplyr)
+library(readxl)
+library(tidyr)
+library(readr)
+library(stringr)
+library(ggplot2)
+library(beeswarm)
+```
+
+## Limpieza de datos
+
+### Importar los archivos y ver su estructura
+Se utilizan dos archivos:  uno con los resultados de las elecciones presidenciales de 2014 y otro con las de 2018.  Los archivos contienen las mismas variables: el cantón y columnas con la cantidad de votos por partido y los votos válidos.
+
+```{r error=FALSE, message=FALSE, warning=FALSE}
+
+#Importar archivo de resultados 2014
+resultados2014 <- read_delim("resultados2014.csv",",", escape_double = FALSE, trim_ws = TRUE)
+
+resultados2018 <- read_delim("resultados2018.csv",",", escape_double = FALSE, trim_ws = TRUE)
+
+head(resultados2014,5)
+
+head(resultados2018,5)
+```
+
+Para la base de 2018, tenemos que cambiar los nombres de las columnas para que tengan el nombre de los partidos.  Podemos hacerlo con un **for loop**: 
+
+```{r error=FALSE, message=FALSE, warning=FALSE}
+#Creamos un vector con los nombres de los partidos en el orden en que aparecen las columnas
+nombres_partidos<-c('pase18', 'pac18', 'adc18', 'pt18', 'fa18', 'pin18', 'pln18', 'pml18', 'png18', 'prc18', 'prsc18', 'prn18', 'pusc18')
+
+#Creamos una funcion que toma como argumento un dataframe
+cambio_nombres<- function(dataframe){
+  for (i in 1:length(nombres_partidos)){
+    names(dataframe)[names(dataframe) == paste0('votos', i)] <- nombres_partidos[i]
+  }
+  return(dataframe)
+}
+
+resultados2018<-cambio_nombres(resultados2018)
+```
+
+¿Cuál es la alternativa al for loop? Repetir el mismo código en muchas líneas, lo cuál no es tan eficiente: 
+
+```{r eval=FALSE, error=FALSE, message=FALSE, warning=FALSE}
+names(resultados)[names(resultados) == 'votos1'] <- 'pase18'
+names(resultados)[names(resultados) == 'votos2'] <- 'pac18'
+names(resultados)[names(resultados) == 'votos3'] <- 'adc18'
+names(resultados)[names(resultados) == 'votos4'] <- 'pt18'
+names(resultados)[names(resultados) == 'votos5'] <- 'fa18'
+names(resultados)[names(resultados) == 'votos6'] <- 'pin18'
+names(resultados)[names(resultados) == 'votos7'] <- 'pln18'
+names(resultados)[names(resultados) == 'votos8'] <- 'pml18'
+names(resultados)[names(resultados) == 'votos9'] <- 'png18'
+names(resultados)[names(resultados) == 'votos10'] <- 'prc18'
+names(resultados)[names(resultados) == 'votos11'] <- 'prsc18'
+names(resultados)[names(resultados) == 'votos12'] <- 'prn18'
+names(resultados)[names(resultados) == 'votos13'] <- 'pusc18'
+```
+
+Los archivos contienen la cantidad de votos, pero necesitamos **calcular el porcentaje de votos por cantón**.  Cómo necesitamos hacer esto para ambos dataframes (2014 y 2018), en lugar de repetir líneas de código podemos crear una **función**.  
+
+**¿Por qué y cuándo es útil usar una función?**  
+Las funciones son objetos en los que podemos agregar líneas de código que se vayan a ejecutar varias veces con diferentes parámetros, en lugar de repetir líneas de código es mejor usar una función.  Las funciones hacen más legible el código y es una buena práctica.  
+
+Las funciones tienen tres elementos:    
+
+*  Un nombre.  
+*  Los argumentos de la función, que son una serie de valores, obligatorios u opcionales, que se le pasan a la función:   `function(x, y, z)`.    
+*  El cuerpo de la función, que contiene las operaciones que hace la función y el valor que regresa la función `return`.  El cuerpo se escribe dentro de `{ }`.  
+
+En este caso, la función se llama `porcentaje_votos`, que toma como argumento un `dataframe` y da como resultado un nuevo dataframe que contiene el porcentaje de votos de cada partido por cantón.  
+
+```{r error=FALSE, message=FALSE, warning=FALSE}
+porcentaje_votos<-function(dataframe){
+  x<-dataframe%>%
+      group_by(codigo)%>%
+  mutate_all(funs((. / votos_validos)*100))%>%
+  select(-votos_validos)
+  return(x)
+}
+
+resultados14_porc<-porcentaje_votos(resultados2014)
+resultados18_porc<-porcentaje_votos(resultados2018)
+```
+
+Una vez que tenemos el porcentaje de votos, tenemos que **calcular cuál partido ganó cada cantón**.   Para esto también podemos generar una función que toma como argumentos el dataframe del porcentaje de votos y el periodo de tiempo (14 o 18).  
+
+```{r error=FALSE, message=FALSE, warning=FALSE}
+ganador<-function(dataframe, periodo){
+  x<-dataframe%>%
+    gather(partido, votos, -codigo) %>%
+  group_by(codigo)%>%
+  filter(votos==max(votos))%>%
+  separate(partido, c(paste0("partido", periodo)), sep="1")%>%
+  select(-votos)
+  return(x)
+}
+
+ganador14<-ganador(resultados14_porc, 14)
+ganador18<-ganador(resultados18_porc, 18)
+```
+
+
+## Análisis  
+
+#### ¿Cuántos cantones ganó cada partido y cómo se compara con el 2014? 
+
+En las tablas se muestran cuántos cantones ganó cada partido.  Mientras en 2014 el PAC ganó 36 cantones, en el 2018 ganó solo 30.  El PRN ganó en 2018 37 cantones, mientras que el PLN pasó de ganar 43 cantones en 2014 a 11 en 2018. 
+
+```{r error=FALSE, message=FALSE, warning=FALSE}
+table(ganador14$partido14)
+table(ganador18$partido18)
+```
+
+#### ¿A cuáles partidos les ganó cantones el PRN?
+
+Para esto tenemos que combinar las dos tablas con los ganadores por cantón, y generar nuevas variables que nos indiquen si el cantón cambió de ganador, y cuál fue el cambio (el partido X le robó el cantón al partido Y).  
+
+En 46 cantones hubo un cambio de partido.  El PRN le "robó" 9 cantones al PAC, 26 al PLN y 2 al Frente Amplio, que estos partidos habían ganado en 2014.  El PAC le "robó 6 al PLN, y el PUSC 3 al PAC.  
+
+```{r error=FALSE, message=FALSE, warning=FALSE}
+
+#Cambiaron los cantones?
+cambio <-ganador18%>%
+  left_join(ganador14, by="codigo")%>%
+  mutate(cambio=ifelse(partido18==partido14,"sin cambio", "cambio"),
+         robo=ifelse(cambio=="cambio", paste(partido18, partido14, sep=" al "), "sin cambio"))
+         
+table(cambio$cambio)
+table(cambio$robo)
+```
+
+#### ¿Cómo cambió el porcentaje de votos del PLN, PUSC, PAC, PRN y PIN?
+
+Para esto podemos hacer gráficos que muestren el cambio en el porcentaje de votos entre 2014 y 2018 para cada partido.  Para eso creamos una función que toma como argumentos el partido y un color y nos genera un gráfico beeswarm. 
+
+```{r error=FALSE, message=FALSE, warning=FALSE}
+
+grafico_votos<-function(partido, color){
+  x<-resultados18_porc%>%
+  select(codigo, paste0(partido,18))%>%
+  left_join(
+    (resultados14_porc%>%
+    select(codigo, paste0(partido,14))),
+  by="codigo")%>%
+    gather(anio, votos, - codigo)%>%
+  mutate(anio=ifelse(anio==paste0(partido,14), 2014, 2018))
+  
+par(las=1, bty="l", family="mono", font=1, bg="transparent")
+
+return(
+  beeswarm(votos ~ anio, data=x, col=color, pch=16, method="hex", 
+         cex=0.8, horizontal=TRUE, ylab="", xlab=paste("Porcentaje de votos del", toupper(partido)), 
+         main=paste("Porcentaje de votos del", toupper(partido)), xlim=c(0, 60))
+)
+}
+
+grafico_votos("pac", "#BE0000")
+grafico_votos("pln", "#219B63")
+grafico_votos("pusc", "#005094")
+grafico_votos("prn", "#FFCC00")
+grafico_votos("pin", "#3F5E78")
+```
+ 
+#### ¿Quién ganó en los 6 cantones con más electores?
+
+De los 6 cantones con más electores (más de 100.000 votantes) San José, Desamparados, Pérez Zeledón, Alajuela, San Carlos y Cartago, el PRN ganó todos, menos Cartago.    Estos cantones representan el 28% del total de votos.  
+
+```{r eval=FALSE, error=FALSE, message=FALSE, warning=FALSE}
+
+cantones<- resultados2018%>%
+  filter(codigo==101 | codigo==103 |codigo==119|codigo==201|codigo==210|codigo==301)
+sum(cantones$votos_validos)/sum(resultados2018$votos_validos)*100
+
+resultados18_porc%>%
+  filter(codigo==101 | codigo==103 |codigo==119|codigo==201|codigo==210|codigo==301)%>%
+  gather(partido, votos, -codigo)%>%
+  group_by(codigo)%>%
+  filter(votos==max(votos))
+  
+```
+
+#### Mapas de resultados 
+
+Una forma visual efectiva para ver la votación es por medio de mapas. Para hacer mapas en R vamos a requerir de varios paquetes: 
+
+```{r echo=T, message=FALSE, warning=FALSE}
+library("gpclib")
+library("raster")
+library("maptools")
+library("broom")
+library(mapproj)
+library(rlang)
+gpclibPermit()
+
+#codigos y nombre cantones
+codigohasc <- read_excel("codigohasc2.xlsx")
+
+#Para mapas
+mapa14 <-  left_join(resultados14_porc, codigohasc, by="codigo")
+mapa18<-left_join(resultados18_porc, codigohasc, by="codigo")
+```
+
+Ahora es necesario importar geodatos para Costa Rica de la web.  Luego con el comando `fortify` transformamos esos datos en polígonos que nos permiten mapear la información.  
+
+Creamos una función para generar los mapas: 
+
+*  Con el comando `full_join`, unimos los geodatos con la base que habíamos creado previamente sobre el porcentaje de votación por cantones y ordenamos los polígonos con `arrange` para que el programa sepa en qué orden debe dibujar el mapa.  
+* `geom_polygon()` es el tipo de gráfico para hacer mapas.  Lo primero es especificar los datos, que están en la base de datos que creamos `cr_mapa`.  Luego especificamos los aesthetics.  Siempre que hacemos un mapa vamos a poner en el eje X la longitud y en el Y la latitud.  Luego agrupamos por la variable `group` y finalmente rellenamos con la variable de porcentaje de votos.  
+* `coord_map()` especifica que es un mapa de coordenadas.  
+* `ylim()` sirve para decirle al gráfico en donde centrar las coordenadas.  Si es un mapa de CR, lo recomendable es poner `ylim(8, NA)`.  
+* `scale_fill_gradient()` indica que queremos colorear el mapa con una escala.  En este caso, los colores se seleccionaron de forma manual, poniendo el valor más bajo y el más alto, y R colorea según esa escala.  Además se establecen los límites que van de 0 a 70%.  Esto es muy importante, porque como año a año los porcentajes cambian, si no establecemos un límite los colores cambiarían y lo que necesitamos es que la escala de color se mantenga igual a lo largo de los años para ver la evolución.  
+* `labs` agrega etiquetas al mapa.  
+* `theme_void()` se usa para que el fondo salga en blanco.
+
+```{r echo=T, message=FALSE, warning=FALSE}
+#Importar geodatos
+cr <- getData("GADM", country = "CRI", level = 2)
+#transformar geodatos
+cr2<- fortify(cr, region = "HASC_2")
+
+
+mapa_resultados<-function(dataframe_mapa, partido, color_high, titulo){
+  
+  #Unir bases
+  cr_mapa <- cr2%>%
+    full_join(dataframe_mapa, by=c("id"="HASC"))%>%
+    arrange(desc(order))
+
+  return(
+  ggplot() +
+  geom_polygon(data = cr_mapa, aes(x = long, y = lat, group = group, fill = {{partido}}),color = "white") +
+  coord_map() + ylim(8, NA) + 
+  scale_fill_gradient(low = "#E0E0E0", high = color_high, limits = c(0, 70)) +
+  labs(x = NULL, 
+       y = NULL, 
+       title = titulo) +
+  theme_void()
+)
+}
+
+mapa_resultados(mapa18, pln18, "#219B63", "PLN 2018")
+mapa_resultados(mapa18, pac18, "#BE0000", "PAC 2018")
+mapa_resultados(mapa18, prn18,  "#005094", "PRN 2018")
+  
+```
+
+
+<div class="tocify-extend-page" data-unique="tocify-extend-page" style="height: 0;"></div> 
